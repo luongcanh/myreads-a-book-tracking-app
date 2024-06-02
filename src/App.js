@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import * as BooksAPI from './BookAPI';
 import ListBooks from './ListBooks';
@@ -6,124 +6,119 @@ import './App.css';
 import SearchBooks from './SearchBooks';
 
 const bookshelves = [
-	{ key: 'currentlyReading', name: 'Currently Reading' },
-	{ key: 'wantToRead', name: 'Want to Read' },
-	{ key: 'read', name: 'Read' }
+    { key: 'currentlyReading', name: 'Currently Reading' },
+    { key: 'wantToRead', name: 'Want to Read' },
+    { key: 'read', name: 'Read' }
 ];
 
-class App extends Component {
-	state = { myBooks: [], searchBooks: [], error: false };
+const App = () => {
+	const [myBooks, setMyBooks] = useState([]);
+	const [searchBooks, setSearchBooks] = useState([]);
+	const [, setError] = useState(false);
 
-	componentDidMount = () => {
+	/**
+	 * @description This effect runs only once after the initial render
+	 */
+	useEffect(() => {
 		BooksAPI.getAll()
 			.then(books => {
-				this.setState({ myBooks: books });
+				setMyBooks(books);
 			})
 			.catch(err => {
 				console.log(err);
-				this.setState({ error: true });
+				setError(true);
 			});
-	};
+	}, []);
 
 	/***
 	 * @description Move books between shelves
 	 */
-	handleOnMoveBook = (book, shelf) => {
+	const handleOnMoveBook = (book, shelf) => {
 		BooksAPI.update(book, shelf).catch(err => {
 			console.log(err);
-			this.setState({ error: true });
+			setError(true);
 		});
 		if (shelf === 'none') {
-			this.setState(prevState => ({
-				myBooks: prevState.myBooks.filter(b => b.id !== book.id)
-			}));
+			setMyBooks(prevState => prevState.filter(b => b.id !== book.id));
 		} else {
-			book.shelf = shelf;
-			this.setState(prevState => ({
-				myBooks: prevState.myBooks.filter(b => b.id !== book.id).concat(book)
-			}));
+			const updatedBook = { ...book, shelf };
+			setMyBooks(prevState => {
+				const filteredBooks = prevState.filter(b => b.id !== book.id);
+				return [...filteredBooks, updatedBook];
+			});
 		}
 	};
 
 	/**
 	 * @description Search for books
 	 */
-	handleOnSearchBook = (value) => {
+	const handleOnSearchBook = (value) => {
 		const searchQuery = value;
-        if (searchQuery) {
-            BooksAPI.search(searchQuery, 300).then((books)=>{
-                if (books.error) {
+		if (searchQuery) {
+			BooksAPI.search(searchQuery, 300).then((books) => {
+				if (books.error) {
 					// Handle invalid results
-					this.setState({ searchBooks: [] });
+					setSearchBooks([]);
 				} else {
 					// Handle valid results
-					this.setState({ searchBooks: books }, () => {
-						this.syncBookShelf()
-					});
-                }
-            });
-        } else {
-            this.setState({ searchBooks: [] });
-        }
+					setSearchBooks(books);
+					syncBookShelf();
+				}
+			});
+		} else {
+			setSearchBooks([]);
+		}
 	}
 
-	syncBookShelf = () => {
-        const myBooks= this.state.myBooks;
-        const searchBooks = this.state.searchBooks;
-        if (searchBooks.length > 0) {
-			myBooks.forEach((book) => {
-				searchBooks.forEach((results) =>{
-                        if (book.id === results.id) {
-                            results.shelf = book.shelf
-                        }
-                    })
-                })
-        }
-        this.setState({ searchBooks: searchBooks });
-    }
+	const syncBookShelf = () => {
+		if (searchBooks.length > 0) {
+			const updatedSearchBooks = searchBooks.map(searchBook => {
+                const matchedBook = myBooks.find(myBook => myBook.id === searchBook.id);
+                if (matchedBook) {
+                    return { ...searchBook, shelf: matchedBook.shelf };
+                }
+                return searchBook;
+            });
+            setSearchBooks(updatedSearchBooks);
+		}
+	}
 
 	/**
 	 * @description Page refreshes
 	 */
-	handleOnResetSearch = () => {
-		this.setState({ searchBooks: [] });
+	const handleOnResetSearch = () => {
+		setSearchBooks([]);
 	};
 
-	render() {
-		const { myBooks, searchBooks, error } = this.state;
-		if (error) {
-			return <div>Network error. Please try again later.</div>;
-		}
-		return (
-			<div className="app">
-				<Routes>
-					<Route
-						exact
-						path="/"
-						element={
-							<ListBooks
-								bookshelves={bookshelves}
-								books={myBooks}
-								onMove={this.handleOnMoveBook}
-							/>
-						}
-					/>
-					<Route
-						path="/search"
-						element={
-							<SearchBooks
-								searchBooks={searchBooks}
-								myBooks={myBooks}
-								onSearch={this.handleOnSearchBook}
-								onMove={this.handleOnMoveBook}
-								onResetSearch={this.handleOnResetSearch}
-							/>
-						}
-					/>
-				</Routes>
-			</div>
-		);
-	}
-}
+	return (
+		<div className="app">
+			<Routes>
+				<Route
+					exact
+					path="/"
+					element={
+						<ListBooks
+							bookshelves={bookshelves}
+							books={myBooks}
+							onMove={handleOnMoveBook}
+						/>
+					}
+				/>
+				<Route
+					path="/search"
+					element={
+						<SearchBooks
+							searchBooks={searchBooks}
+							myBooks={myBooks}
+							onSearch={handleOnSearchBook}
+							onMove={handleOnMoveBook}
+							onResetSearch={handleOnResetSearch}
+						/>
+					}
+				/>
+			</Routes>
+		</div>
+	);
+};
 
 export default App;
